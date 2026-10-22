@@ -10,12 +10,279 @@ export interface InvoicePdfOptions {
   storeAddress?: string;
   customerKhataBalance?: number;
   cashierName?: string;
+  format?: 'thermal_80mm' | 'thermal_58mm' | 'a4' | 'mini_a4';
 }
 
 /**
- * Generates an enterprise-grade A4 / thermal styled PDF document for an invoice
+ * Generates a high-contrast, clean 80mm or 58mm thermal-style PDF receipt
  */
-export function generateInvoicePdf(sale: Sale, options: InvoicePdfOptions = {}): jsPDF {
+export function generateThermalReceiptPdf(sale: Sale, options: InvoicePdfOptions = {}): jsPDF {
+  const storeName = options.storeName || "Al-Madina Medicos & Mart";
+  const storePhone = options.storePhone || "0300-8889900";
+  const storeAddress = options.storeAddress || "Shop #12, Commercial Market, Main Road";
+  const cashierName = options.cashierName || "Manager";
+  const is58mm = options.format === 'thermal_58mm';
+
+  const pageWidth = is58mm ? 58 : 80;
+  const margin = is58mm ? 3 : 4;
+  const contentWidth = pageWidth - (margin * 2);
+
+  const items = (sale.items && sale.items.length > 0) ? sale.items : [{
+    product_id: sale.product_id || 'prod',
+    product_name: sale.product_name,
+    company: sale.company,
+    quantity: sale.quantity,
+    price: sale.price,
+    total: sale.total
+  }];
+
+  // Dynamic continuous page height calculation
+  // Base header (~32mm) + Meta (~24mm) + Table Header (~6mm) + Items + Totals (~32mm) + Due (~8mm) + Footer (~22mm)
+  const itemRowHeight = 6.5;
+  const totalItemsHeight = items.length * itemRowHeight;
+  const dueRowHeight = sale.due_amount > 0 ? 9 : 0;
+  const calculatedHeight = Math.max(130, 32 + 25 + 6 + totalItemsHeight + 34 + dueRowHeight + 24 + 10);
+
+  const doc = new jsPDF({
+    orientation: 'portrait',
+    unit: 'mm',
+    format: [pageWidth, calculatedHeight],
+  });
+
+  let currentY = 7;
+
+  // --- STORE HEADER ---
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(is58mm ? 10 : 12);
+  doc.setTextColor(15, 23, 42); // slate-900
+  doc.text(storeName.toUpperCase(), pageWidth / 2, currentY, { align: 'center' });
+
+  currentY += 4.5;
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(is58mm ? 6.5 : 7.5);
+  doc.setTextColor(71, 85, 105); // slate-600
+  doc.text(storeAddress, pageWidth / 2, currentY, { align: 'center', maxWidth: contentWidth });
+
+  currentY += 4;
+  doc.text(`Helpline / Tel: ${storePhone}`, pageWidth / 2, currentY, { align: 'center' });
+
+  currentY += 3.5;
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(is58mm ? 6.5 : 7);
+  doc.text("*** TAX RETAIL CASH MEMO ***", pageWidth / 2, currentY, { align: 'center' });
+
+  // Dashed separator
+  currentY += 3;
+  doc.setLineDashPattern([1, 1], 0);
+  doc.setDrawColor(148, 163, 184); // slate-400
+  doc.line(margin, currentY, pageWidth - margin, currentY);
+
+  // --- INVOICE & CUSTOMER METADATA ---
+  currentY += 4;
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(is58mm ? 6.5 : 7.5);
+  doc.setTextColor(15, 23, 42);
+
+  // Row 1: Invoice #
+  doc.text("INVOICE #:", margin, currentY);
+  doc.setFont('helvetica', 'bold');
+  doc.text(sale.invoice_number, pageWidth - margin, currentY, { align: 'right' });
+
+  // Row 2: Date & Time
+  currentY += 4;
+  doc.setFont('helvetica', 'normal');
+  doc.text("DATE:", margin, currentY);
+  const formattedDate = new Date(sale.sale_date).toLocaleString('en-US', {
+    day: 'numeric',
+    month: 'short',
+    year: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit'
+  });
+  doc.text(formattedDate, pageWidth - margin, currentY, { align: 'right' });
+
+  // Row 3: Customer
+  currentY += 4;
+  doc.text("CUSTOMER:", margin, currentY);
+  doc.setFont('helvetica', 'bold');
+  const custName = sale.customer_name || "Walk-in Retail Customer";
+  doc.text(custName, pageWidth - margin, currentY, { align: 'right', maxWidth: contentWidth - 20 });
+
+  // Row 4: Phone (if available)
+  if (sale.phone_number) {
+    currentY += 4;
+    doc.setFont('helvetica', 'normal');
+    doc.text("PHONE:", margin, currentY);
+    doc.text(sale.phone_number, pageWidth - margin, currentY, { align: 'right' });
+  }
+
+  // Row 5: Cashier
+  currentY += 4;
+  doc.setFont('helvetica', 'normal');
+  doc.text("CASHIER:", margin, currentY);
+  doc.text(cashierName, pageWidth - margin, currentY, { align: 'right' });
+
+  // Payment Status Badge
+  currentY += 4;
+  if (sale.due_amount > 0) {
+    doc.setFillColor(254, 242, 242);
+    doc.setDrawColor(244, 63, 94);
+    doc.roundedRect(margin, currentY, contentWidth, 5.5, 1, 1, 'FD');
+    doc.setTextColor(190, 18, 60);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(is58mm ? 6.5 : 7);
+    doc.text("PAYMENT: CREDIT / UDHAAR DUE", pageWidth / 2, currentY + 3.8, { align: 'center' });
+  } else {
+    doc.setFillColor(236, 253, 245);
+    doc.setDrawColor(16, 185, 129);
+    doc.roundedRect(margin, currentY, contentWidth, 5.5, 1, 1, 'FD');
+    doc.setTextColor(4, 120, 87);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(is58mm ? 6.5 : 7);
+    doc.text("PAYMENT: PAID IN FULL", pageWidth / 2, currentY + 3.8, { align: 'center' });
+  }
+
+  currentY += 7.5;
+  // Solid table header line
+  doc.setLineDashPattern([], 0);
+  doc.setDrawColor(15, 23, 42);
+  doc.setLineWidth(0.3);
+  doc.line(margin, currentY, pageWidth - margin, currentY);
+
+  // Table Columns Header
+  currentY += 3.5;
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(is58mm ? 6 : 7);
+  doc.setTextColor(15, 23, 42);
+
+  const colItemX = margin;
+  const colQtyX = is58mm ? margin + 28 : margin + 40;
+  const colTotalX = pageWidth - margin;
+
+  doc.text("ITEM (QTY @ RATE)", colItemX, currentY);
+  doc.text("TOTAL", colTotalX, currentY, { align: 'right' });
+
+  currentY += 2;
+  doc.line(margin, currentY, pageWidth - margin, currentY);
+  currentY += 3.5;
+
+  // Item Rows
+  doc.setFont('helvetica', 'normal');
+  items.forEach((item) => {
+    // Product Title
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(is58mm ? 6.5 : 7.5);
+    doc.setTextColor(15, 23, 42);
+    
+    // Truncate/wrap name if too wide
+    const maxItemWidth = is58mm ? 32 : 46;
+    doc.text(item.product_name, colItemX, currentY, { maxWidth: maxItemWidth });
+
+    // Total Amount on the right
+    doc.text(`PKR ${item.total.toFixed(2)}`, colTotalX, currentY, { align: 'right' });
+
+    // Sub-line: Qty @ Unit Price
+    currentY += 3.2;
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(is58mm ? 6 : 6.8);
+    doc.setTextColor(100, 116, 139);
+    doc.text(`${item.quantity} × PKR ${item.price.toFixed(2)}`, colItemX, currentY);
+
+    currentY += 3.8;
+  });
+
+  // Table Bottom Divider
+  doc.setLineDashPattern([1, 1], 0);
+  doc.setDrawColor(148, 163, 184);
+  doc.line(margin, currentY, pageWidth - margin, currentY);
+
+  // --- FINANCIAL TOTALS ---
+  currentY += 4;
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(is58mm ? 6.8 : 7.5);
+  doc.setTextColor(71, 85, 105);
+
+  doc.text("Subtotal:", margin, currentY);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(15, 23, 42);
+  doc.text(`PKR ${sale.total.toFixed(2)}`, colTotalX, currentY, { align: 'right' });
+
+  currentY += 4;
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(71, 85, 105);
+  doc.text("Discount / Tax:", margin, currentY);
+  doc.setFont('helvetica', 'bold');
+  doc.text("PKR 0.00", colTotalX, currentY, { align: 'right' });
+
+  // Grand Total Banner
+  currentY += 3;
+  doc.setLineDashPattern([], 0);
+  doc.setDrawColor(15, 23, 42);
+  doc.line(margin, currentY, pageWidth - margin, currentY);
+
+  currentY += 4;
+  doc.setFontSize(is58mm ? 8 : 9.5);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(15, 23, 42);
+  doc.text("GRAND TOTAL:", margin, currentY);
+  doc.text(`PKR ${sale.total.toFixed(2)}`, colTotalX, currentY, { align: 'right' });
+
+  currentY += 2;
+  doc.line(margin, currentY, pageWidth - margin, currentY);
+
+  // Amount Paid
+  currentY += 4;
+  doc.setFontSize(is58mm ? 6.8 : 7.5);
+  doc.setTextColor(4, 120, 87); // Emerald
+  doc.text(`Amount Paid (${sale.payment_method.toUpperCase()}):`, margin, currentY);
+  doc.text(`PKR ${sale.amount_paid.toFixed(2)}`, colTotalX, currentY, { align: 'right' });
+
+  // Udhaar Balance Due
+  if (sale.due_amount > 0) {
+    currentY += 4.5;
+    doc.setFillColor(254, 242, 242);
+    doc.roundedRect(margin, currentY - 3, contentWidth, 6, 1, 1, 'F');
+    doc.setTextColor(225, 29, 72); // Rose
+    doc.setFont('helvetica', 'bold');
+    doc.text("BALANCE DUE (KHATA):", margin + 1.5, currentY + 1);
+    doc.text(`PKR ${sale.due_amount.toFixed(2)}`, colTotalX - 1.5, currentY + 1, { align: 'right' });
+  }
+
+  // --- FOOTER NOTICE ---
+  currentY += 7;
+  doc.setLineDashPattern([1, 1], 0);
+  doc.setDrawColor(148, 163, 184);
+  doc.line(margin, currentY, pageWidth - margin, currentY);
+
+  currentY += 4;
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(is58mm ? 6.5 : 7);
+  doc.setTextColor(15, 23, 42);
+  doc.text("THANK YOU FOR YOUR PATRONAGE!", pageWidth / 2, currentY, { align: 'center' });
+
+  currentY += 3.5;
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(is58mm ? 5.5 : 6);
+  doc.setTextColor(100, 116, 139);
+  doc.text("Goods once sold will only be exchanged within 3 days", pageWidth / 2, currentY, { align: 'center' });
+  currentY += 3;
+  doc.text("with this original computer-generated cash memo.", pageWidth / 2, currentY, { align: 'center' });
+
+  currentY += 3;
+  doc.setFontSize(is58mm ? 5 : 5.5);
+  doc.setTextColor(148, 163, 184);
+  doc.text("Inventory Blue Flow • 100% In-Device Storage", pageWidth / 2, currentY, { align: 'center' });
+
+  currentY += 3;
+  doc.text("* * * * * * * * * * * * * * * *", pageWidth / 2, currentY, { align: 'center' });
+
+  return doc;
+}
+
+/**
+ * Generates an enterprise-grade A4 / Mini-A4 styled PDF document for an invoice
+ */
+export function generateA4InvoicePdf(sale: Sale, options: InvoicePdfOptions = {}): jsPDF {
   const storeName = options.storeName || "Al-Madina Medicos & Mart";
   const storePhone = options.storePhone || "0300-8889900";
   const storeAddress = options.storeAddress || "Shop #12, Commercial Market, Main Road";
@@ -33,7 +300,6 @@ export function generateInvoicePdf(sale: Sale, options: InvoicePdfOptions = {}):
   const contentWidth = pageWidth - (margin * 2);
 
   // --- BRAND HEADER BLOCK ---
-  // Top Banner
   doc.setFillColor(15, 23, 42); // #0f172a Deep Slate Navy
   doc.rect(margin, 12, contentWidth, 26, 'F');
 
@@ -264,6 +530,16 @@ export function generateInvoicePdf(sale: Sale, options: InvoicePdfOptions = {}):
 }
 
 /**
+ * Main PDF Generation Router: Defaults to thermal 80mm format for POS, or A4 if requested
+ */
+export function generateInvoicePdf(sale: Sale, options: InvoicePdfOptions = {}): jsPDF {
+  if (options.format === 'a4' || options.format === 'mini_a4') {
+    return generateA4InvoicePdf(sale, options);
+  }
+  return generateThermalReceiptPdf(sale, options);
+}
+
+/**
  * Generates and triggers instant browser download of the invoice PDF
  */
 export function downloadInvoicePdf(sale: Sale, options: InvoicePdfOptions = {}): void {
@@ -277,4 +553,34 @@ export function downloadInvoicePdf(sale: Sale, options: InvoicePdfOptions = {}):
 export function getInvoicePdfBlob(sale: Sale, options: InvoicePdfOptions = {}): Blob {
   const doc = generateInvoicePdf(sale, options);
   return doc.output('blob');
+}
+
+/**
+ * Returns the PDF document as a standard File object required by navigator.share({ files: [file] })
+ */
+export function getInvoicePdfFile(sale: Sale, options: InvoicePdfOptions = {}): File {
+  const blob = getInvoicePdfBlob(sale, options);
+  const filename = `${sale.invoice_number || 'Invoice'}.pdf`;
+  return new File([blob], filename, {
+    type: 'application/pdf',
+    lastModified: Date.now()
+  });
+}
+
+/**
+ * Returns the PDF document as a raw base64 string for JSON API payloads (e.g. Baileys / WhatsApp Web JS)
+ */
+export function getInvoicePdfBase64(sale: Sale, options: InvoicePdfOptions = {}): string {
+  const doc = generateInvoicePdf(sale, options);
+  const dataUri = doc.output('datauristring');
+  const commaIdx = dataUri.indexOf(',');
+  return commaIdx !== -1 ? dataUri.substring(commaIdx + 1) : dataUri;
+}
+
+/**
+ * Returns the full Data URI (data:application/pdf;base64,...)
+ */
+export function getInvoicePdfDataUri(sale: Sale, options: InvoicePdfOptions = {}): string {
+  const doc = generateInvoicePdf(sale, options);
+  return doc.output('datauristring');
 }
