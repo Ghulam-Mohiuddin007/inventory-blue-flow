@@ -242,6 +242,14 @@ export const InventoryTable = ({ products }: InventoryTableProps) => {
             </div>
           );
         })}
+
+        {filteredProducts.length === 0 && (
+          <div className="text-center py-10 bg-white rounded-xl border border-slate-200 text-slate-400">
+            <Package className="h-8 w-8 mx-auto mb-2 opacity-30" />
+            <p className="text-sm font-semibold text-slate-700">No products in inventory</p>
+            <p className="text-xs text-slate-400 mt-0.5">Use "Add New Product" or "Scan Supplier Bill" to stock your store catalog.</p>
+          </div>
+        )}
       </div>
 
       {/* DESKTOP TABLE VIEW */}
@@ -318,6 +326,16 @@ export const InventoryTable = ({ products }: InventoryTableProps) => {
                   </TableRow>
                 );
               })}
+
+              {filteredProducts.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={8} className="text-center py-10 text-slate-400">
+                    <Package className="h-8 w-8 mx-auto mb-2 opacity-30" />
+                    <p className="text-sm font-semibold text-slate-700">No products in inventory</p>
+                    <p className="text-xs text-slate-400 mt-0.5">Use "Add New Product" or "Scan Supplier Bill" to stock your store catalog.</p>
+                  </TableCell>
+                </TableRow>
+              )}
             </TableBody>
           </Table>
         </div>

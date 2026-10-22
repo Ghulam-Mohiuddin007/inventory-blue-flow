@@ -397,6 +397,107 @@ class DeviceStorageEngine {
     return newEntry;
   }
 
+  /**
+   * Atomically executes a multi-item supplier stock-in batch:
+   * - Increments stock quantities of matched products.
+   * - Creates new product records for uncatalogued items.
+   * - Updates cost/retail prices.
+   * - Atomically logs batch history into stock_entries table.
+   */
+  public async batchStockIn(batch: {
+    supplierName: string;
+    invoiceNumber?: string;
+    invoiceDate?: string;
+    items: Array<{
+      action: 'increment' | 'create' | 'ignore';
+      productId?: string;
+      productName: string;
+      company?: string;
+      formula?: string;
+      quantity: number;
+      purchasePrice: number;
+      retailPrice?: number;
+    }>;
+  }): Promise<{ updatedCount: number; createdCount: number }> {
+    await this.ensureInitialized();
+    const now = new Date().toISOString();
+    const entryDate = batch.invoiceDate || now;
+    let updatedCount = 0;
+    let createdCount = 0;
+
+    await db.transaction('rw', [db.products, db.stock_entries], async () => {
+      for (const item of batch.items) {
+        if (item.action === 'ignore' || item.quantity <= 0) continue;
+
+        if (item.action === 'increment' && item.productId) {
+          const product = await db.products.get(item.productId);
+          if (product) {
+            const updatedQty = product.quantity + item.quantity;
+            await db.products.update(product.id, {
+              quantity: updatedQty,
+              cost_price: item.purchasePrice > 0 ? item.purchasePrice : product.cost_price,
+              price: item.retailPrice && item.retailPrice > 0 ? item.retailPrice : product.price,
+              company: item.company || product.company,
+              updated_at: now
+            });
+            updatedCount++;
+
+            // Log stock history
+            await db.stock_entries.add({
+              id: generateId('stock'),
+              product_id: product.id,
+              product_name: product.name,
+              company: product.company || batch.supplierName || 'Supplier',
+              formula: product.formula || '',
+              quantity: item.quantity,
+              entry_type: 'existing',
+              entry_date: entryDate,
+              created_at: now,
+              customer_name: batch.supplierName ? `Supplier: ${batch.supplierName}` : undefined,
+              phone_number: batch.invoiceNumber ? `Bill #${batch.invoiceNumber}` : undefined
+            });
+          }
+        } else if (item.action === 'create' || (!item.productId && item.action !== 'ignore')) {
+          const retailPrice = item.retailPrice && item.retailPrice > 0 
+            ? item.retailPrice 
+            : Math.round(item.purchasePrice * 1.25);
+
+          const newProduct: ProductRecord = {
+            id: generateId('prod'),
+            name: item.productName.trim(),
+            company: item.company || batch.supplierName || 'General',
+            formula: item.formula || '',
+            quantity: item.quantity,
+            price: retailPrice,
+            cost_price: item.purchasePrice,
+            created_at: now,
+            updated_at: now
+          };
+
+          await db.products.add(newProduct);
+          createdCount++;
+
+          // Log stock history
+          await db.stock_entries.add({
+            id: generateId('stock'),
+            product_id: newProduct.id,
+            product_name: newProduct.name,
+            company: newProduct.company,
+            formula: newProduct.formula,
+            quantity: item.quantity,
+            entry_type: 'new',
+            entry_date: entryDate,
+            created_at: now,
+            customer_name: batch.supplierName ? `Supplier: ${batch.supplierName}` : undefined,
+            phone_number: batch.invoiceNumber ? `Bill #${batch.invoiceNumber}` : undefined
+          });
+        }
+      }
+    });
+
+    return { updatedCount, createdCount };
+  }
+
   // --- Backup & Restore (JSON Export from IndexedDB) ---
 
   public async exportBackup(): Promise<string> {
@@ -457,14 +558,23 @@ class DeviceStorageEngine {
     }
   }
 
-  public async resetToSampleData(): Promise<void> {
+  public async clearAllData(): Promise<void> {
     await db.transaction('rw', [db.products, db.sales, db.khata_customers, db.stock_entries], async () => {
       await db.products.clear();
       await db.sales.clear();
       await db.khata_customers.clear();
       await db.stock_entries.clear();
     });
-    await db.initializeDefaults();
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('inventory_device_products');
+      localStorage.removeItem('inventory_device_sales');
+      localStorage.removeItem('inventory_device_khata');
+      localStorage.removeItem('inventory_device_stock_entries');
+    }
+  }
+
+  public async resetToSampleData(): Promise<void> {
+    await this.clearAllData();
   }
 }
 

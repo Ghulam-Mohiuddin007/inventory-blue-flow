@@ -1,9 +1,10 @@
 import { useState } from "react";
-import { Package, Plus } from "lucide-react";
+import { Package, Plus, ScanLine } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { InventoryTable } from "@/components/InventoryTable";
 import { AddProductDialog } from "@/components/AddProductDialog";
+import { ScanSupplierBillDialog } from "@/components/ScanSupplierBillDialog";
 import { 
   useProducts, 
   useAddProduct, 
@@ -14,6 +15,7 @@ import { LegacyProduct } from "./Index";
 
 const Inventory = () => {
   const [showAddProduct, setShowAddProduct] = useState(false);
+  const [showScanBill, setShowScanBill] = useState(false);
   const { data: products = [], isLoading } = useProducts();
   const addProductMutation = useAddProduct();
   const addStockEntryMutation = useAddStockEntry();
@@ -103,13 +105,24 @@ const Inventory = () => {
           </p>
         </div>
 
-        <Button 
-          onClick={() => setShowAddProduct(true)}
-          className="bg-indigo-600 hover:bg-indigo-700 text-white shadow-xs font-semibold text-xs sm:text-sm h-10 px-3.5 gap-1.5 shrink-0"
-        >
-          <Plus className="h-4 w-4" />
-          Add New Product
-        </Button>
+        <div className="flex items-center gap-2 shrink-0">
+          <Button 
+            onClick={() => setShowScanBill(true)}
+            variant="outline"
+            className="border-indigo-200 bg-indigo-50/70 hover:bg-indigo-100 text-indigo-700 shadow-xs font-semibold text-xs sm:text-sm h-10 px-3.5 gap-1.5 transition-all"
+          >
+            <ScanLine className="h-4 w-4 text-indigo-600" />
+            <span>Scan Supplier Bill</span>
+          </Button>
+
+          <Button 
+            onClick={() => setShowAddProduct(true)}
+            className="bg-indigo-600 hover:bg-indigo-700 text-white shadow-xs font-semibold text-xs sm:text-sm h-10 px-3.5 gap-1.5 transition-all"
+          >
+            <Plus className="h-4 w-4" />
+            <span>Add New Product</span>
+          </Button>
+        </div>
       </div>
 
       <Card className="shadow-xs border-slate-200 bg-white">
@@ -131,6 +144,12 @@ const Inventory = () => {
         existingProducts={legacyProducts}
         onIncreaseProduct={handleIncreaseProduct}
         onLogStockEntry={handleLogStockEntry}
+      />
+
+      <ScanSupplierBillDialog
+        open={showScanBill}
+        onOpenChange={setShowScanBill}
+        existingProducts={products}
       />
     </div>
   );

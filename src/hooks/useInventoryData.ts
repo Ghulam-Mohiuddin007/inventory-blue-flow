@@ -235,3 +235,29 @@ export const useRecordKhataPayment = () => {
     },
   });
 };
+
+export const useBatchStockIn = () => {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  return useMutation({
+    mutationFn: async (batch: Parameters<typeof deviceStorage.batchStockIn>[0]) => {
+      return await deviceStorage.batchStockIn(batch);
+    },
+    onSuccess: (result) => {
+      queryClient.invalidateQueries({ queryKey: ['products'] });
+      queryClient.invalidateQueries({ queryKey: ['stock_entries'] });
+      toast({
+        title: "Stock-In Successfully Committed",
+        description: `Updated ${result.updatedCount} existing items, created ${result.createdCount} new products in device memory.`,
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Stock-In Failed",
+        description: error.message || "Failed to update inventory batches",
+        variant: "destructive",
+      });
+    },
+  });
+};

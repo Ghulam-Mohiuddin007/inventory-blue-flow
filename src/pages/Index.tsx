@@ -21,7 +21,9 @@ import {
   Clock,
   CheckCircle2,
   Share2,
-  SlidersHorizontal
+  SlidersHorizontal,
+  ScanLine,
+  Trash2
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -31,6 +33,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { AddProductDialog } from "@/components/AddProductDialog";
 import { AddSaleDialog } from "@/components/AddSaleDialog";
 import { InvoiceReceiptDrawer } from "@/components/InvoiceReceiptDrawer";
+import { ScanSupplierBillDialog } from "@/components/ScanSupplierBillDialog";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import { deviceStorage, Sale } from "@/services/deviceStorage";
@@ -81,6 +84,7 @@ export interface LegacyStockEntry {
 const Index = () => {
   const [showAddProduct, setShowAddProduct] = useState(false);
   const [showAddSale, setShowAddSale] = useState(false);
+  const [showScanBill, setShowScanBill] = useState(false);
   const [activeTab, setActiveTab] = useState("overview");
   const [selectedSaleForReceipt, setSelectedSaleForReceipt] = useState<Sale | null>(null);
   const [showReceiptDrawer, setShowReceiptDrawer] = useState(false);
@@ -221,16 +225,16 @@ const Index = () => {
     e.target.value = '';
   };
 
-  const handleResetDemoData = async () => {
-    if (confirm("Reset current inventory to sample store data?")) {
-      await deviceStorage.resetToSampleData();
+  const handleClearAllData = async () => {
+    if (confirm("Are you sure you want to delete all dummy and store data? This will permanently wipe all products, sales, khata ledgers, and stock history.")) {
+      await deviceStorage.clearAllData();
       queryClient.invalidateQueries({ queryKey: ['products'] });
       queryClient.invalidateQueries({ queryKey: ['sales'] });
       queryClient.invalidateQueries({ queryKey: ['stock_entries'] });
       queryClient.invalidateQueries({ queryKey: ['khata_customers'] });
       toast({
-        title: "Demo Data Loaded",
-        description: "Sample products and sales restored to device memory.",
+        title: "All Dummy Data Deleted",
+        description: "Store inventory, sales, and ledgers have been completely cleared to a clean slate.",
       });
     }
   };
@@ -304,7 +308,15 @@ const Index = () => {
         </div>
 
         {/* Primary Action Buttons */}
-        <div className="flex items-center gap-2.5 shrink-0">
+        <div className="flex items-center gap-2 shrink-0">
+          <Button
+            onClick={() => setShowScanBill(true)}
+            variant="outline"
+            className="border-indigo-200 bg-indigo-50/70 hover:bg-indigo-100 text-indigo-700 active:scale-[0.98] font-semibold text-xs h-10 px-3.5 shadow-2xs gap-1.5 transition-all"
+          >
+            <ScanLine className="h-4 w-4 text-indigo-600" />
+            <span className="hidden sm:inline">Scan Bill</span>
+          </Button>
           <Button
             onClick={() => navigate("/pos")}
             className="bg-indigo-600 hover:bg-indigo-700 active:scale-[0.98] text-white font-semibold text-xs h-10 px-4 shadow-sm gap-1.5 transition-all"
@@ -488,7 +500,7 @@ const Index = () => {
 
         {/* TAB 1: OPERATIONS & LAUNCHPAD */}
         <TabsContent value="operations" className="space-y-4 pt-1">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             {/* Quick POS Launch Card */}
             <div 
               onClick={() => navigate("/pos")}
@@ -509,6 +521,29 @@ const Index = () => {
               </div>
               <div className="w-12 h-12 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0 group-hover:bg-indigo-600 group-hover:text-white transition-all">
                 <ShoppingCart className="h-6 w-6" />
+              </div>
+            </div>
+
+            {/* Quick Supplier Bill Scan Card */}
+            <div 
+              onClick={() => setShowScanBill(true)}
+              className="cursor-pointer group p-5 rounded-xl border border-emerald-100 bg-white hover:border-emerald-300 hover:shadow-md transition-all flex items-center justify-between"
+            >
+              <div className="space-y-1 pr-3">
+                <span className="text-[10px] uppercase font-bold text-emerald-700 tracking-wider">Automated Stock-In</span>
+                <h3 className="text-base font-bold text-slate-900 group-hover:text-emerald-600 transition-colors">
+                  Scan Supplier Bill
+                </h3>
+                <p className="text-xs text-slate-500 line-clamp-2">
+                  Snap or upload supplier purchase invoices. Automatically extracts items and updates inventory stock atomically.
+                </p>
+                <div className="pt-2 flex items-center gap-1 text-xs font-semibold text-emerald-600 group-hover:translate-x-0.5 transition-transform">
+                  <span>Start Invoice Scanner</span>
+                  <ArrowRight className="h-3.5 w-3.5" />
+                </div>
+              </div>
+              <div className="w-12 h-12 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0 group-hover:bg-emerald-600 group-hover:text-white transition-all">
+                <ScanLine className="h-6 w-6" />
               </div>
             </div>
 
@@ -731,28 +766,28 @@ const Index = () => {
               </Button>
             </Card>
 
-            {/* Reset Sample Demo Data Card */}
-            <Card className="bg-white border border-slate-200/90 shadow-xs rounded-xl p-4 space-y-3">
+            {/* Clear All Dummy / Store Data Card */}
+            <Card className="bg-white border border-rose-200/90 shadow-xs rounded-xl p-4 space-y-3">
               <div className="flex items-center gap-2">
-                <div className="p-2 bg-amber-50 text-amber-700 rounded-lg">
-                  <RotateCcw className="h-4 w-4" />
+                <div className="p-2 bg-rose-50 text-rose-700 rounded-lg">
+                  <Trash2 className="h-4 w-4" />
                 </div>
                 <div>
-                  <h4 className="font-bold text-xs text-slate-900">Reload Sample Store Data</h4>
-                  <p className="text-[11px] text-slate-500">Reset to pharmacy demo items</p>
+                  <h4 className="font-bold text-xs text-slate-900">Delete All Dummy & Store Data</h4>
+                  <p className="text-[11px] text-slate-500">Wipe clean to zero products & sales</p>
                 </div>
               </div>
               <p className="text-xs text-slate-600">
-                Resets the local database to standard medical sample products and simulated sales for testing.
+                Permanently clears all products, sales transactions, credit khata ledgers, and stock history from this device.
               </p>
               <Button
                 size="sm"
                 variant="outline"
-                onClick={handleResetDemoData}
-                className="w-full text-xs font-semibold h-9 gap-1.5 text-amber-800 border-amber-300 hover:bg-amber-50"
+                onClick={handleClearAllData}
+                className="w-full text-xs font-semibold h-9 gap-1.5 text-rose-700 border-rose-300 hover:bg-rose-50"
               >
-                <RotateCcw className="h-3.5 w-3.5" />
-                Reset Sample Data
+                <Trash2 className="h-3.5 w-3.5" />
+                Delete All Data
               </Button>
             </Card>
           </div>
@@ -781,6 +816,13 @@ const Index = () => {
         open={showReceiptDrawer}
         onOpenChange={setShowReceiptDrawer}
         sale={selectedSaleForReceipt}
+      />
+
+      {/* Supplier Bill Scanner Modal */}
+      <ScanSupplierBillDialog
+        open={showScanBill}
+        onOpenChange={setShowScanBill}
+        existingProducts={products}
       />
     </div>
   );

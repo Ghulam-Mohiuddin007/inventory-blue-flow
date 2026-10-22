@@ -312,6 +312,14 @@ export const SalesHistory = ({ sales, onViewReceipt }: SalesHistoryProps) => {
             </div>
           );
         })}
+
+        {sortedSales.length === 0 && (
+          <div className="text-center py-10 bg-white rounded-xl border border-slate-200 text-slate-400">
+            <Receipt className="h-8 w-8 mx-auto mb-2 opacity-30" />
+            <p className="text-sm font-semibold text-slate-700">No sales transactions recorded</p>
+            <p className="text-xs text-slate-400 mt-0.5">Transactions from the POS Terminal will appear here.</p>
+          </div>
+        )}
       </div>
 
       {/* DESKTOP TABLE VIEW */}
@@ -379,6 +387,16 @@ export const SalesHistory = ({ sales, onViewReceipt }: SalesHistoryProps) => {
                   </TableCell>
                 </TableRow>
               ))}
+
+              {sortedSales.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={9} className="text-center py-10 text-slate-400">
+                    <Receipt className="h-8 w-8 mx-auto mb-2 opacity-30" />
+                    <p className="text-sm font-semibold text-slate-700">No sales transactions recorded</p>
+                    <p className="text-xs text-slate-400 mt-0.5">Transactions from the POS Terminal will appear here.</p>
+                  </TableCell>
+                </TableRow>
+              )}
             </TableBody>
           </Table>
         </div>
