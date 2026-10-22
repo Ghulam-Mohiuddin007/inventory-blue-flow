@@ -6,10 +6,13 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "@/contexts/AuthContext";
 import ProtectedRoute from "@/components/ProtectedRoute";
+import { AppLayout } from "@/components/layout/AppLayout";
 import Index from "./pages/Index";
 import AuthPage from "./pages/AuthPage";
 import NotFound from "./pages/NotFound";
 import Inventory from "./pages/Inventory";
+import PosTerminal from "./pages/PosTerminal";
+import CustomerKhataPage from "./pages/CustomerKhataPage";
 import SalesHistoryPage from "./pages/SalesHistoryPage";
 import StockEntriesPage from "./pages/StockEntriesPage";
 
@@ -24,26 +27,55 @@ const App = () => (
         <BrowserRouter>
           <Routes>
             <Route path="/auth" element={<AuthPage />} />
+            
             <Route path="/" element={
               <ProtectedRoute>
-                <Index />
+                <AppLayout>
+                  <Index />
+                </AppLayout>
               </ProtectedRoute>
             } />
+            
             <Route path="/inventory" element={
               <ProtectedRoute>
-                <Inventory />
+                <AppLayout>
+                  <Inventory />
+                </AppLayout>
               </ProtectedRoute>
             } />
+
+            <Route path="/pos" element={
+              <ProtectedRoute>
+                <AppLayout>
+                  <PosTerminal />
+                </AppLayout>
+              </ProtectedRoute>
+            } />
+
+            <Route path="/khata" element={
+              <ProtectedRoute>
+                <AppLayout>
+                  <CustomerKhataPage />
+                </AppLayout>
+              </ProtectedRoute>
+            } />
+
             <Route path="/sales-history" element={
               <ProtectedRoute>
-                <SalesHistoryPage />
+                <AppLayout>
+                  <SalesHistoryPage />
+                </AppLayout>
               </ProtectedRoute>
             } />
+
             <Route path="/stock-entries" element={
               <ProtectedRoute>
-                <StockEntriesPage />
+                <AppLayout>
+                  <StockEntriesPage />
+                </AppLayout>
               </ProtectedRoute>
             } />
+
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>

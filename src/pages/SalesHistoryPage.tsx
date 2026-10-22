@@ -1,68 +1,79 @@
-import { ArrowLeft, TrendingUp } from "lucide-react";
+import { useState } from "react";
+import { BarChart3, ShoppingCart } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { SalesHistory } from "@/components/SalesHistory";
+import { InvoiceReceiptDrawer } from "@/components/InvoiceReceiptDrawer";
 import { useNavigate } from "react-router-dom";
 import { useSales } from "@/hooks/useInventoryData";
-import { LegacySale } from "./Index";
+import { Sale } from "@/services/deviceStorage";
 
 const SalesHistoryPage = () => {
   const navigate = useNavigate();
   const { data: sales = [], isLoading } = useSales();
+  const [selectedSale, setSelectedSale] = useState<Sale | null>(null);
+  const [showReceiptDrawer, setShowReceiptDrawer] = useState(false);
 
-  // Convert to legacy format for existing components
-  const legacySales: LegacySale[] = sales.map(s => ({
-    id: s.id,
-    productName: s.product_name,
-    price: s.price,
-    companyName: s.company || '',
-    quantity: s.quantity,
-    date: new Date(s.sale_date)
-  }));
+  const handleViewReceipt = (sale: Sale) => {
+    setSelectedSale(sale);
+    setShowReceiptDrawer(true);
+  };
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="text-center">
-          <TrendingUp className="h-12 w-12 text-primary mx-auto mb-4 animate-spin" />
-          <p className="text-muted-foreground">Loading sales history...</p>
+      <div className="py-12 flex items-center justify-center">
+        <div className="text-center space-y-2">
+          <BarChart3 className="h-8 w-8 text-indigo-600 animate-spin mx-auto" />
+          <p className="text-xs text-slate-500 font-medium">Loading sales history from device...</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-background">
-      <header className="inventory-header">
-        <div className="container mx-auto px-6 py-6">
-          <div className="flex items-center space-x-4">
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => navigate("/")}
-              className="text-white hover:bg-white/20"
-            >
-              <ArrowLeft className="h-6 w-6" />
-            </Button>
-            <div>
-              <h1 className="text-3xl font-bold text-white">Sales History</h1>
-              <p className="text-white/80 mt-1">Track your sales performance over time</p>
-            </div>
-          </div>
+    <div className="space-y-4">
+      {/* Enterprise Page Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div>
+          <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-slate-900 flex items-center gap-2">
+            <BarChart3 className="h-6 w-6 text-emerald-600" />
+            Sales Transactions & Invoices
+          </h1>
+          <p className="text-xs sm:text-sm text-slate-500">
+            {sales.length} {sales.length === 1 ? 'Transaction' : 'Transactions'} recorded in device storage
+          </p>
         </div>
-      </header>
 
-      <main className="container mx-auto px-6 py-8">
-        <Card className="inventory-card">
-          <CardHeader>
-            <CardTitle>Sales History</CardTitle>
-            <CardDescription>Track your sales performance over time</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <SalesHistory sales={legacySales} />
-          </CardContent>
-        </Card>
-      </main>
+        <Button 
+          onClick={() => navigate("/pos")}
+          className="bg-indigo-600 hover:bg-indigo-700 text-white shadow-xs font-semibold text-xs sm:text-sm h-10 px-3.5 gap-1.5 shrink-0"
+        >
+          <ShoppingCart className="h-4 w-4" />
+          New Sale (POS)
+        </Button>
+      </div>
+
+      <Card className="shadow-xs border-slate-200 bg-white">
+        <CardHeader className="p-4 sm:p-5 pb-2 sm:pb-3 border-b border-slate-100">
+          <CardTitle className="text-sm sm:text-base font-bold text-slate-900">Transaction History Log</CardTitle>
+          <CardDescription className="text-xs">
+            Search invoices, filter by date, download CSV backups, or view full customer receipts
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="p-4 sm:p-5 pt-4">
+          <SalesHistory 
+            sales={sales} 
+            onViewReceipt={handleViewReceipt} 
+          />
+        </CardContent>
+      </Card>
+
+      {/* Invoice & Receipt Preview Drawer */}
+      <InvoiceReceiptDrawer 
+        open={showReceiptDrawer}
+        onOpenChange={setShowReceiptDrawer}
+        sale={selectedSale}
+      />
     </div>
   );
 };

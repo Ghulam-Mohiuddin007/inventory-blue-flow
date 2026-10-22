@@ -120,6 +120,8 @@
 
   body {
     @apply bg-background text-foreground;
+    font-family: 'Plus Jakarta Sans', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    -webkit-tap-highlight-color: transparent;
   }
 }
 
@@ -153,5 +155,71 @@
   .inventory-error {
     @apply text-white;
     background-color: hsl(var(--inventory-error));
+  }
+}
+
+/* ==========================================================================
+   Thermal Receipt Printing Optimization (58mm / 80mm roll printers)
+   ========================================================================== */
+@media print {
+  @page {
+    margin: 0;
+    size: auto;
+  }
+
+  html, body {
+    background: #ffffff !important;
+    color: #000000 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    width: 100% !important;
+    height: auto !important;
+    overflow: visible !important;
+  }
+
+  /* Hide entire page shell, modal backdrop, navigation, and sidebar */
+  body * {
+    visibility: hidden;
+  }
+
+  /* Only make the designated thermal receipt print container visible */
+  #thermal-receipt-print-area,
+  #thermal-receipt-print-area * {
+    visibility: visible;
+  }
+
+  #thermal-receipt-print-area {
+    position: absolute;
+    left: 0;
+    top: 0;
+    margin: 0 !important;
+    padding: 3mm 4mm !important;
+    background: #ffffff !important;
+    color: #000000 !important;
+    box-shadow: none !important;
+    border: none !important;
+    font-family: 'JetBrains Mono', 'Courier New', Courier, monospace !important;
+    font-size: 11px !important;
+    line-height: 1.3 !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  /* 58mm compact roll width mode (approx 48mm printable) */
+  #thermal-receipt-print-area.roll-58mm {
+    width: 58mm !important;
+    max-width: 58mm !important;
+  }
+
+  /* 80mm standard roll width mode (approx 72mm printable) */
+  #thermal-receipt-print-area.roll-80mm {
+    width: 80mm !important;
+    max-width: 80mm !important;
+  }
+
+  .no-print,
+  .no-print * {
+    display: none !important;
+    visibility: hidden !important;
   }
 }

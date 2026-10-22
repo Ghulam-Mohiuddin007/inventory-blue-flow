@@ -116,7 +116,7 @@ export const AddProductDialog = ({ open, onOpenChange, onAddProduct, existingPro
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[600px]">
+      <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto p-4 sm:p-6">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Package className="h-5 w-5 text-primary" />
@@ -181,6 +181,7 @@ export const AddProductDialog = ({ open, onOpenChange, onAddProduct, existingPro
                       <Input
                         id="quantity"
                         type="number"
+                        inputMode="numeric"
                         min="0"
                         value={formData.quantity}
                         onChange={(e) => setFormData(prev => ({ ...prev, quantity: e.target.value }))}
@@ -193,6 +194,7 @@ export const AddProductDialog = ({ open, onOpenChange, onAddProduct, existingPro
                       <Input
                         id="price"
                         type="number"
+                        inputMode="decimal"
                         step="0.01"
                         min="0"
                         value={formData.price}
@@ -267,6 +269,7 @@ export const AddProductDialog = ({ open, onOpenChange, onAddProduct, existingPro
                     <Input
                       id="additional-quantity"
                       type="number"
+                      inputMode="numeric"
                       min="1"
                       value={additionalQuantity}
                       onChange={(e) => setAdditionalQuantity(e.target.value)}

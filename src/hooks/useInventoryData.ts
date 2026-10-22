@@ -1,69 +1,25 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
-import { LegacySale } from '@/pages/Index';
+import { 
+  deviceStorage, 
+  type Product, 
+  type Sale, 
+  type StockEntry,
+  type KhataCustomer,
+  type KhataTransaction
+} from '@/services/deviceStorage';
 
-export interface Product {
-  id: string;
-  name: string;
-  company?: string;
-  formula?: string;
-  quantity: number;
-  price: number;
-  user_id?: string;
-  created_at: string;
-  updated_at: string;
-}
+export type { Product, Sale, StockEntry, KhataCustomer, KhataTransaction };
 
-export interface Sale {
-  id: string;
-  product_id?: string;
-  product_name: string;
-  company?: string;
-  customer_name?: string;
-  phone_number?: string;
-  quantity: number;
-  price: number;
-  total: number;
-  user_id?: string;
-  sale_date: string;
-  created_at: string;
-}
-
-export interface StockEntry {
-  id: string;
-  product_id?: string;
-  product_name: string;
-  company?: string;
-  formula?: string;
-  quantity: number;
-  entry_type: string;
-  user_id?: string;
-  entry_date: string;
-  created_at: string;
-  customer_name?: string;    // Add this
-  phone_number?: string;     // Add this
-}
-
-// Products queries and mutations
+// Products queries and mutations (In-Device IndexedDB)
 export const useProducts = () => {
   const { user } = useAuth();
   
   return useQuery({
     queryKey: ['products'],
     queryFn: async () => {
-      console.log('Fetching products for user:', user?.id);
-      if (!user) throw new Error('User not authenticated');
-      
-      const { data, error } = await supabase
-        .from('products')
-        .select('*')
-        .order('created_at', { ascending: false });
-      
-      console.log('Products query result:', { data: data?.length, error });
-      if (error) throw error;
-      return data as Product[];
+      return await deviceStorage.getProducts();
     },
     enabled: !!user,
   });
@@ -76,29 +32,26 @@ export const useAddProduct = () => {
 
   return useMutation({
     mutationFn: async (product: Omit<Product, 'id' | 'created_at' | 'updated_at' | 'user_id'>) => {
-      if (!user) throw new Error('User not authenticated');
+      if (!user) throw new Error('User not authenticated on this device');
       
-      const { data, error } = await supabase
-        .from('products')
-        .insert([{ ...product, user_id: user.id }])
-        .select()
-        .single();
-      
-      if (error) throw error;
-      return data;
+      const newProduct = await deviceStorage.addProduct({
+        ...product,
+        user_id: user.id
+      });
+      return newProduct;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['products'] });
       toast({
-        title: "Success",
-        description: "Product added successfully",
+        title: "Product Saved",
+        description: "Product committed to local IndexedDB storage",
       });
     },
-    onError: (error) => {
-      console.error('Error adding product:', error);
+    onError: (error: Error) => {
+      console.error('Error adding product to device storage:', error);
       toast({
         title: "Error",
-        description: "Failed to add product",
+        description: error.message || "Failed to add product",
         variant: "destructive",
       });
     },
@@ -111,45 +64,29 @@ export const useUpdateProductQuantity = () => {
 
   return useMutation({
     mutationFn: async ({ id, quantity }: { id: string; quantity: number }) => {
-      const { data, error } = await supabase
-        .from('products')
-        .update({ quantity })
-        .eq('id', id)
-        .select()
-        .single();
-      
-      if (error) throw error;
-      return data;
+      return await deviceStorage.updateProductQuantity(id, quantity);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['products'] });
     },
-    onError: (error) => {
+    onError: (error: Error) => {
       toast({
         title: "Error",
-        description: "Failed to update product quantity",
+        description: error.message || "Failed to update product quantity",
         variant: "destructive",
       });
     },
   });
 };
 
-// Sales queries and mutations
+// Sales queries and mutations (In-Device IndexedDB)
 export const useSales = () => {
   const { user } = useAuth();
   
   return useQuery({
     queryKey: ['sales'],
     queryFn: async () => {
-      if (!user) throw new Error('User not authenticated');
-      
-      const { data, error } = await supabase
-        .from('sales')
-        .select('*')
-        .order('sale_date', { ascending: false });
-      console.log("Raw sales data from Supabase:", data); // Debug line
-      if (error) throw error;
-      return data as Sale[];
+      return await deviceStorage.getSales();
     },
     enabled: !!user,
   });
@@ -159,91 +96,45 @@ export const useAddSale = () => {
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const { user } = useAuth();
-  const updateProductQuantity = useUpdateProductQuantity();
 
   return useMutation({
     mutationFn: async (sale: Omit<Sale, 'id' | 'created_at' | 'user_id'>) => {
-      if (!user) throw new Error('User not authenticated');
+      if (!user) throw new Error('User not authenticated on this device');
       
-      // Ensure customer_name and phone_number are included if present
-      const { customer_name, phone_number, ...rest } = sale;
-      const saleData = {
-        ...rest,
-        customer_name: customer_name || null,
-        phone_number: phone_number || null,
+      const newSale = await deviceStorage.addSale({
+        ...sale,
         user_id: user.id
-      };
-
-      const { data, error } = await supabase
-        .from('sales')
-        .insert([saleData])
-        .select()
-        .single();
-      
-      if (error) throw error;
-      return data;
+      });
+      return newSale;
     },
-    onSuccess: (data, variables) => {
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['sales'] });
-      
-      // Update product quantity if product_id is provided
-      if (variables.product_id) {
-        // Get current product and reduce quantity
-        queryClient.setQueryData(['products'], (oldData: Product[] | undefined) => {
-          if (!oldData) return oldData;
-          return oldData.map(product => 
-            product.id === variables.product_id 
-              ? { ...product, quantity: Math.max(0, product.quantity - variables.quantity) }
-              : product
-          );
-        });
-        
-        // Also update in the database
-        supabase
-          .from('products')
-          .select('quantity')
-          .eq('id', variables.product_id)
-          .single()
-          .then(({ data: productData, error }) => {
-            if (!error && productData) {
-              const newQuantity = Math.max(0, productData.quantity - variables.quantity);
-              updateProductQuantity.mutate({ id: variables.product_id!, quantity: newQuantity });
-            }
-          });
-      }
-      
+      queryClient.invalidateQueries({ queryKey: ['products'] });
+      queryClient.invalidateQueries({ queryKey: ['khata_customers'] });
       toast({
-        title: "Success",
-        description: "Sale recorded successfully",
+        title: "Sale Recorded",
+        description: "Sale saved and stock deducted in local IndexedDB",
       });
     },
-    onError: (error) => {
+    onError: (error: Error) => {
       console.error('Error adding sale:', error);
       toast({
         title: "Error",
-        description: "Failed to record sale",
+        description: error.message || "Failed to record sale",
         variant: "destructive",
       });
     },
   });
 };
 
-// Stock entries queries and mutations
+// Stock entries queries and mutations (In-Device IndexedDB)
 export const useStockEntries = () => {
   const { user } = useAuth();
   
   return useQuery({
     queryKey: ['stock_entries'],
     queryFn: async () => {
-      if (!user) throw new Error('User not authenticated');
-      
-      const { data, error } = await supabase
-        .from('stock_entries')
-        .select('*')
-        .order('entry_date', { ascending: false });
-      console.log("Raw stock entries from Supabase:", data); // Debug line
-      if (error) throw error;
-      return data as StockEntry[];
+      return await deviceStorage.getStockEntries();
     },
     enabled: !!user,
   });
@@ -255,24 +146,19 @@ export const useDeleteProduct = () => {
 
   return useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase
-        .from('products')
-        .delete()
-        .eq('id', id);
-      
-      if (error) throw error;
+      await deviceStorage.deleteProduct(id);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['products'] });
       toast({
-        title: "Success",
-        description: "Product deleted successfully",
+        title: "Product Deleted",
+        description: "Product removed from local IndexedDB",
       });
     },
-    onError: (error) => {
+    onError: (error: Error) => {
       toast({
         title: "Error",
-        description: "Failed to delete product",
+        description: error.message || "Failed to delete product",
         variant: "destructive",
       });
     },
@@ -286,45 +172,66 @@ export const useAddStockEntry = () => {
 
   return useMutation({
     mutationFn: async (entry: Omit<StockEntry, 'id' | 'created_at' | 'user_id'>) => {
-      if (!user) throw new Error('User not authenticated');
+      if (!user) throw new Error('User not authenticated on this device');
       
-      const { data, error } = await supabase
-        .from('stock_entries')
-        .insert([{ ...entry, user_id: user.id }])
-        .select()
-        .single();
-      
-      if (error) throw error;
-      return data;
+      const newEntry = await deviceStorage.addStockEntry({
+        ...entry,
+        user_id: user.id
+      });
+      return newEntry;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['stock_entries'] });
       toast({
-        title: "Success",
-        description: "Stock entry logged successfully",
+        title: "Stock Logged",
+        description: "Stock entry committed to local IndexedDB",
       });
     },
-    onError: (error) => {
+    onError: (error: Error) => {
       console.error('Error adding stock entry:', error);
       toast({
         title: "Error",
-        description: "Failed to log stock entry",
+        description: error.message || "Failed to log stock entry",
         variant: "destructive",
       });
     },
   });
 };
 
-// Example mapping for LegacySale
-const { data: sales = [] } = useSales();
+// Customer Khata queries and mutations
+export const useKhataCustomers = () => {
+  const { user } = useAuth();
 
-const legacySales: LegacySale[] = sales.map(sale => ({
-  id: sale.id,
-  productName: sale.product_name,
-  companyName: sale.company,
-  customerName: sale.customer_name,      // <-- Use this!
-  phoneNumber: sale.phone_number,        // <-- Use this!
-  price: sale.price,
-  quantity: sale.quantity,
-  date: new Date(sale.sale_date),
-}));
+  return useQuery({
+    queryKey: ['khata_customers'],
+    queryFn: async () => {
+      return await deviceStorage.getKhataCustomers();
+    },
+    enabled: !!user,
+  });
+};
+
+export const useRecordKhataPayment = () => {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  return useMutation({
+    mutationFn: async ({ customerId, amount, notes }: { customerId: string; amount: number; notes?: string }) => {
+      return await deviceStorage.recordKhataPayment(customerId, amount, notes);
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['khata_customers'] });
+      toast({
+        title: "Payment Received",
+        description: `Payment recorded. Remaining balance: PKR ${data.total_due.toFixed(2)}`,
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to record Khata payment",
+        variant: "destructive",
+      });
+    },
+  });
+};

@@ -1,12 +1,12 @@
 {
-  "name": "Inventory Management System",
-  "short_name": "Inventory Manager",
-  "description": "Professional inventory management software for tracking products, sales, and stock levels",
+  "name": "Inventory Blue Flow - Smart POS & Khata",
+  "short_name": "InventoryFlow",
+  "description": "Enterprise-grade in-device inventory management, retail POS and customer credit ledger",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#ffffff",
-  "theme_color": "#2563eb",
-  "orientation": "portrait-primary",
+  "background_color": "#0f172a",
+  "theme_color": "#0f172a",
+  "orientation": "any",
   "categories": ["business", "productivity", "utilities"],
   "lang": "en",
   "dir": "ltr",
@@ -25,26 +25,12 @@
       "purpose": "any maskable"
     }
   ],
-  "screenshots": [
-    {
-      "src": "/screenshot-wide.png",
-      "sizes": "1280x720",
-      "type": "image/png",
-      "form_factor": "wide"
-    },
-    {
-      "src": "/screenshot-narrow.png",
-      "sizes": "640x1136",
-      "type": "image/png",
-      "form_factor": "narrow"
-    }
-  ],
   "shortcuts": [
     {
-      "name": "Add Product",
-      "short_name": "Add Product",
-      "description": "Quickly add a new product to inventory",
-      "url": "/?action=add-product",
+      "name": "POS Terminal",
+      "short_name": "POS",
+      "description": "Open Point-of-Sale terminal for instant checkout",
+      "url": "/pos",
       "icons": [
         {
           "src": "/icon-192.png",
@@ -53,10 +39,22 @@
       ]
     },
     {
-      "name": "View Sales",
-      "short_name": "Sales",
-      "description": "View sales history and analytics",
-      "url": "/?action=view-sales",
+      "name": "Customer Khata",
+      "short_name": "Khata",
+      "description": "Manage customer credit ledger and payments",
+      "url": "/khata",
+      "icons": [
+        {
+          "src": "/icon-192.png",
+          "sizes": "192x192"
+        }
+      ]
+    },
+    {
+      "name": "Stock Inventory",
+      "short_name": "Stock",
+      "description": "View and manage products in stock",
+      "url": "/inventory",
       "icons": [
         {
           "src": "/icon-192.png",
