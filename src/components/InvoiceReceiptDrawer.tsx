@@ -1,4 +1,4 @@
-import React, { useRef, useState } from "react";
+import React, { useRef, useState, useEffect } from "react";
 import { 
   Dialog, 
   DialogContent, 
@@ -24,16 +24,27 @@ import {
   FileDown, 
   MessageSquare,
   CheckCircle2,
-  AlertCircle
+  AlertCircle,
+  Smartphone,
+  Server,
+  Cloud,
+  FileText
 } from "lucide-react";
 import { Sale } from "@/services/deviceStorage";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
-import { downloadInvoicePdf, getInvoicePdfBlob } from "@/services/pdfService";
+import { 
+  downloadInvoicePdf, 
+  getInvoicePdfBlob, 
+  getInvoicePdfFile, 
+  getInvoicePdfBase64,
+  InvoicePdfOptions 
+} from "@/services/pdfService";
 import { 
   dispatchInvoiceToWhatsApp, 
   sanitizeWhatsAppNumber, 
-  getWhatsAppConfig 
+  getWhatsAppConfig,
+  isWebShareFilesSupported 
 } from "@/services/whatsappService";
 import { WhatsAppConfigDialog } from "./WhatsAppConfigDialog";
 import { cn } from "@/lib/utils";
@@ -53,12 +64,18 @@ export const InvoiceReceiptDrawer: React.FC<InvoiceReceiptDrawerProps> = ({
   const { toast } = useToast();
   
   const [thermalWidth, setThermalWidth] = useState<'58mm' | '80mm'>('80mm');
+  const [pdfFormat, setPdfFormat] = useState<'thermal' | 'a4'>('thermal');
   const [showConfigModal, setShowConfigModal] = useState(false);
   const [recipientPhone, setRecipientPhone] = useState("");
   const [isSendingWhatsApp, setIsSendingWhatsApp] = useState(false);
+  const [webShareAvailable, setWebShareAvailable] = useState(false);
+
+  useEffect(() => {
+    setWebShareAvailable(isWebShareFilesSupported());
+  }, []);
 
   // Sync recipient phone from sale when drawer opens
-  React.useEffect(() => {
+  useEffect(() => {
     if (sale?.phone_number) {
       setRecipientPhone(sale.phone_number);
     } else {
@@ -72,6 +89,16 @@ export const InvoiceReceiptDrawer: React.FC<InvoiceReceiptDrawerProps> = ({
   const cashierName = user?.name || "Manager";
   const storePhone = "0300-8889900";
   const storeAddress = "Shop #12, Commercial Market, Main Road";
+
+  const getPdfOptions = (): InvoicePdfOptions => ({
+    storeName,
+    storePhone,
+    storeAddress,
+    cashierName,
+    format: pdfFormat === 'a4' 
+      ? 'a4' 
+      : (thermalWidth === '58mm' ? 'thermal_58mm' : 'thermal_80mm')
+  });
 
   const saleDateFormatted = new Date(sale.sale_date).toLocaleString('en-US', {
     year: 'numeric',
@@ -87,15 +114,11 @@ export const InvoiceReceiptDrawer: React.FC<InvoiceReceiptDrawerProps> = ({
 
   const handleDownloadPdf = () => {
     try {
-      downloadInvoicePdf(sale, {
-        storeName,
-        storePhone,
-        storeAddress,
-        cashierName
-      });
+      const options = getPdfOptions();
+      downloadInvoicePdf(sale, options);
       toast({
         title: "PDF Invoice Downloaded",
-        description: `Saved ${sale.invoice_number}.pdf to device downloads.`,
+        description: `Saved ${sale.invoice_number}.pdf (${pdfFormat === 'a4' ? 'A4 Document' : 'Thermal Slip'}) to device downloads.`,
       });
     } catch (err) {
       toast({
@@ -109,13 +132,12 @@ export const InvoiceReceiptDrawer: React.FC<InvoiceReceiptDrawerProps> = ({
   const handleWhatsAppDispatch = async () => {
     setIsSendingWhatsApp(true);
     try {
-      // 1. Generate client-side PDF document blob
-      const pdfBlob = getInvoicePdfBlob(sale, {
-        storeName,
-        storePhone,
-        storeAddress,
-        cashierName
-      });
+      const pdfOptions = getPdfOptions();
+      
+      // 1. Generate client-side PDF document as pure File and Base64 objects
+      const pdfFile = getInvoicePdfFile(sale, pdfOptions);
+      const pdfBlob = getInvoicePdfBlob(sale, pdfOptions);
+      const pdfBase64 = getInvoicePdfBase64(sale, pdfOptions);
 
       // Override phone if cashier entered custom recipient phone
       const effectiveSale: Sale = {
@@ -126,26 +148,43 @@ export const InvoiceReceiptDrawer: React.FC<InvoiceReceiptDrawerProps> = ({
       const config = getWhatsAppConfig();
       const sanitized = sanitizeWhatsAppNumber(effectiveSale.phone_number || '', config.defaultCountryCode);
 
-      // 2. In deep-link fallback mode, also automatically trigger PDF download so the user can easily attach it
-      if (config.provider === 'deeplink_only') {
-        downloadInvoicePdf(sale, { storeName, storePhone, storeAddress, cashierName });
+      // 2. Dispatch via WhatsApp service (Web Share API / Local Gateway / Cloud API / Deep Link)
+      const result = await dispatchInvoiceToWhatsApp(effectiveSale, storeName, {
+        pdfFile,
+        pdfBlob,
+        pdfBase64
+      });
+
+      if (result.aborted) {
+        toast({
+          title: "Share Cancelled",
+          description: "WhatsApp share picker was dismissed.",
+        });
+        return;
       }
 
-      // 3. Dispatch via WhatsApp service (Cloud API / Gateway / wa.me deep-link)
-      const result = await dispatchInvoiceToWhatsApp(effectiveSale, storeName, pdfBlob);
-
       if (result.success) {
-        if (result.method === 'cloud_api' || result.method === 'custom_gateway') {
+        if (result.method === 'web_share') {
           toast({
-            title: "WhatsApp Delivered",
+            title: "PDF Attached via Web Share",
+            description: `Opened native WhatsApp intent with ${pdfFile.name} attached! Select contact to send.`,
+          });
+        } else if (result.method === 'custom_gateway') {
+          toast({
+            title: "Direct Gateway Delivered",
+            description: result.message,
+          });
+        } else if (result.method === 'cloud_api') {
+          toast({
+            title: "Cloud API Delivered",
             description: result.message,
           });
         } else {
           toast({
             title: "Opening WhatsApp Chat",
             description: sanitized 
-              ? `Chat opened for +${sanitized} without contact saving! PDF invoice downloaded to attach.` 
-              : "WhatsApp opened with prefilled bill breakdown.",
+              ? `Chat opened for +${sanitized}. Invoice PDF auto-downloaded to attach.` 
+              : "WhatsApp opened with invoice breakdown.",
           });
         }
       }
@@ -191,57 +230,107 @@ export const InvoiceReceiptDrawer: React.FC<InvoiceReceiptDrawerProps> = ({
               </div>
             </div>
             
-            <DialogDescription className="text-xs text-slate-400 flex items-center justify-between mt-1">
+            <DialogDescription className="text-xs text-slate-400 flex flex-wrap items-center justify-between gap-2 mt-1">
               <span>Invoice #{sale.invoice_number}</span>
-              {/* 58mm / 80mm Roll Switcher */}
-              <span className="flex items-center gap-1 bg-slate-800 p-0.5 rounded text-[11px]">
-                <button
-                  type="button"
-                  onClick={() => setThermalWidth('58mm')}
-                  className={cn(
-                    "px-2 py-0.5 rounded font-mono font-semibold transition",
-                    thermalWidth === '58mm' ? "bg-indigo-600 text-white" : "text-slate-400 hover:text-white"
-                  )}
-                >
-                  58mm
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setThermalWidth('80mm')}
-                  className={cn(
-                    "px-2 py-0.5 rounded font-mono font-semibold transition",
-                    thermalWidth === '80mm' ? "bg-indigo-600 text-white" : "text-slate-400 hover:text-white"
-                  )}
-                >
-                  80mm
-                </button>
-              </span>
+              
+              <div className="flex items-center gap-2">
+                {/* Format Switcher: Thermal vs A4 */}
+                <div className="flex items-center gap-1 bg-slate-800 p-0.5 rounded text-[11px]">
+                  <button
+                    type="button"
+                    onClick={() => setPdfFormat('thermal')}
+                    className={cn(
+                      "px-2 py-0.5 rounded font-medium transition flex items-center gap-1",
+                      pdfFormat === 'thermal' ? "bg-indigo-600 text-white" : "text-slate-400 hover:text-white"
+                    )}
+                  >
+                    <Receipt className="h-3 w-3" />
+                    Thermal Slip
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPdfFormat('a4')}
+                    className={cn(
+                      "px-2 py-0.5 rounded font-medium transition flex items-center gap-1",
+                      pdfFormat === 'a4' ? "bg-indigo-600 text-white" : "text-slate-400 hover:text-white"
+                    )}
+                  >
+                    <FileText className="h-3 w-3" />
+                    A4 Memo
+                  </button>
+                </div>
+
+                {/* 58mm / 80mm Switcher if thermal */}
+                {pdfFormat === 'thermal' && (
+                  <div className="flex items-center gap-1 bg-slate-800 p-0.5 rounded text-[11px]">
+                    <button
+                      type="button"
+                      onClick={() => setThermalWidth('58mm')}
+                      className={cn(
+                        "px-1.5 py-0.5 rounded font-mono font-semibold transition",
+                        thermalWidth === '58mm' ? "bg-slate-700 text-white" : "text-slate-400 hover:text-white"
+                      )}
+                    >
+                      58mm
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setThermalWidth('80mm')}
+                      className={cn(
+                        "px-1.5 py-0.5 rounded font-mono font-semibold transition",
+                        thermalWidth === '80mm' ? "bg-slate-700 text-white" : "text-slate-400 hover:text-white"
+                      )}
+                    >
+                      80mm
+                    </button>
+                  </div>
+                )}
+              </div>
             </DialogDescription>
           </DialogHeader>
 
           {/* Quick WhatsApp Recipient Phone Input (no-print) */}
-          <div className="my-2 p-2.5 bg-slate-800/60 rounded-xl border border-slate-700/80 no-print flex items-center gap-2 text-xs">
-            <MessageSquare className="h-4 w-4 text-emerald-400 shrink-0" />
-            <div className="flex-1">
-              <Input
-                type="tel"
-                inputMode="tel"
-                placeholder="WhatsApp Phone (e.g. 03001234567)"
-                value={recipientPhone}
-                onChange={e => setRecipientPhone(e.target.value)}
-                className="h-8 text-xs font-mono bg-slate-900 border-slate-700 text-white placeholder:text-slate-500"
-              />
+          <div className="my-2 p-2.5 bg-slate-800/80 rounded-xl border border-slate-700/80 no-print space-y-2">
+            <div className="flex items-center justify-between text-[11px]">
+              <span className="flex items-center gap-1.5 font-semibold text-slate-200">
+                <MessageSquare className="h-3.5 w-3.5 text-emerald-400" />
+                WhatsApp PDF Document Delivery
+              </span>
+              <span className="text-[10px] text-slate-400 flex items-center gap-1">
+                {webShareAvailable ? (
+                  <Badge variant="outline" className="bg-emerald-950/40 text-emerald-300 border-emerald-800 text-[9px] py-0">
+                    <Smartphone className="h-2.5 w-2.5 mr-1" /> Mobile Direct Intent
+                  </Badge>
+                ) : (
+                  <Badge variant="outline" className="bg-slate-800 text-slate-300 border-slate-700 text-[9px] py-0">
+                    Direct Chat + Auto PDF
+                  </Badge>
+                )}
+              </span>
             </div>
-            <Button
-              type="button"
-              size="sm"
-              onClick={handleWhatsAppDispatch}
-              disabled={isSendingWhatsApp}
-              className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs h-8 px-3 font-semibold gap-1 shrink-0"
-            >
-              <Share2 className="h-3.5 w-3.5" />
-              Send
-            </Button>
+
+            <div className="flex items-center gap-2">
+              <div className="flex-1">
+                <Input
+                  type="tel"
+                  inputMode="tel"
+                  placeholder="Customer WhatsApp Number (e.g. 03001234567)"
+                  value={recipientPhone}
+                  onChange={e => setRecipientPhone(e.target.value)}
+                  className="h-8 text-xs font-mono bg-slate-900 border-slate-700 text-white placeholder:text-slate-500"
+                />
+              </div>
+              <Button
+                type="button"
+                size="sm"
+                onClick={handleWhatsAppDispatch}
+                disabled={isSendingWhatsApp}
+                className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs h-8 px-3 font-semibold gap-1.5 shrink-0 shadow-sm"
+              >
+                <Share2 className="h-3.5 w-3.5" />
+                {isSendingWhatsApp ? "Sending..." : "Send PDF"}
+              </Button>
+            </div>
           </div>
 
           {/* =========================================================================
@@ -380,12 +469,22 @@ export const InvoiceReceiptDrawer: React.FC<InvoiceReceiptDrawerProps> = ({
           </div>
 
           {/* Dialog Actions */}
-          <DialogFooter className="flex flex-col sm:flex-row gap-2 pt-2 no-print">
+          <DialogFooter className="grid grid-cols-2 sm:flex sm:flex-row gap-2 pt-2 no-print">
+            <Button
+              type="button"
+              onClick={handleWhatsAppDispatch}
+              disabled={isSendingWhatsApp}
+              className="col-span-2 sm:flex-1 bg-emerald-600 hover:bg-emerald-700 text-white gap-1.5 text-xs h-10 font-bold shadow-md shadow-emerald-600/25"
+            >
+              <Share2 className="h-4 w-4" />
+              {isSendingWhatsApp ? "Dispatching..." : "Send on WhatsApp (PDF)"}
+            </Button>
+
             <Button
               type="button"
               variant="outline"
               onClick={handleDownloadPdf}
-              className="flex-1 bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700 gap-1.5 text-xs h-10"
+              className="bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700 gap-1.5 text-xs h-10"
             >
               <FileDown className="h-4 w-4" />
               Download PDF
@@ -394,17 +493,17 @@ export const InvoiceReceiptDrawer: React.FC<InvoiceReceiptDrawerProps> = ({
             <Button
               type="button"
               onClick={handlePrint}
-              className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white gap-1.5 text-xs h-10 font-bold shadow-md shadow-indigo-600/25"
+              className="bg-indigo-600 hover:bg-indigo-700 text-white gap-1.5 text-xs h-10 font-bold shadow-md shadow-indigo-600/25"
             >
               <Printer className="h-4 w-4" />
-              Print Receipt
+              Print
             </Button>
 
             <Button
               type="button"
               variant="ghost"
               onClick={() => onOpenChange(false)}
-              className="text-slate-400 hover:text-white h-10 text-xs"
+              className="col-span-2 sm:col-span-1 text-slate-400 hover:text-white h-10 text-xs"
             >
               Close
             </Button>

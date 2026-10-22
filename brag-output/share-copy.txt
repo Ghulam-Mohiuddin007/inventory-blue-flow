@@ -1,0 +1,1 @@
+We built Inventory Blue Flow — an enterprise-grade retail POS and customer Khata ledger that runs 100% in your device browser with zero cloud subscriptions. Scan items, track credit aging, print thermal receipts, and deliver invoices straight to customer WhatsApp chats as PDFs with one tap.
